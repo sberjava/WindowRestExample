@@ -7,6 +7,7 @@ import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 import javax.sql.DataSource;
 import java.io.IOException;
@@ -37,14 +38,18 @@ public class ServiceExample {
                 throw new RuntimeException("Failed to close iterator", e);
             }
         });
-        return Flux.fromStream(jdbcToStream).map(x -> new Dto(x.id(), x.name(), x.description()));
+        return Flux.fromStream(jdbcToStream)
+                .subscribeOn(Schedulers.boundedElastic())
+                .map(x -> new Dto(x.id(), x.name(), x.description()));
     }
 
     public Flux<Dto> findAllBatis() {
         Function<SqlSession, Cursor<BatisEntity>> cursorFunction = sqlSession -> sqlSession
                 .getMapper(EntityMapper.class).findAll();
         var producer = new MyBatisFluxResultProducer<BatisEntity>(sqlSessionFactory);
-        return producer.execute(cursorFunction).map(x -> new Dto(x.getId(), x.getName(), x.getDescription()));
+        return producer.execute(cursorFunction)
+                .subscribeOn(Schedulers.boundedElastic())
+                .map(x -> new Dto(x.getId(), x.getName(), x.getDescription()));
     }
 
     private Connection getConnection() {
